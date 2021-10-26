@@ -81,44 +81,57 @@ def create_path(g,n_jobs,n_machines,sequence,operations_dict):
         vertex = g.vs[op]
         neighbors = g.successors(vertex)
 
-        # print("vertex:", vertex)
-
         # feasible operations -> path
         feasible = []
         
         for neighbor in neighbors:
             vertex_index = g.vs[neighbor].index
             if  vertex_index not in tabu:
-                # print("vertex_index:", vertex_index)
+                # add some usefull comment here
                 idx_job = vertex_index // n_machines
-                # print("idx_job:", idx_job)
-                
                 operation = operations_dict[vertex_index]
-                # print("operation:",operation)
                 feasible_operation = sequence[idx_job][0]
-                # print("feasible_operation", feasible_operation)
 
                 if operation == feasible_operation:
                     index = g.vs[neighbor].index
                     feasible.append(index)
                 
-                # x = input()
-
-        # print(feasible)
         op = random.choice(feasible)
         tabu.append(op)
-
-        """print("tabu",tabu)
-        print("")"""
 
         # Tem que dar um pop em SEQUENCE na operacao que foi utilizada
         idx_job = op // n_machines
         sequence[idx_job].pop(0)
     
-    print(tabu)
+    return tabu
+
+def evaluate_makespan(path,operations_dict,n_jobs,n_machines):
+    print(path)
+    # transform path to operations
+    operations = [operations_dict[i] for i in path]
+
+    print(operations)
+    
+    # each machine has a end time
+    machine_time = [0 for _ in range(n_machines)]
+
+    # more recent end time of the job
+    job_time = [0 for _ in range(n_jobs)]
+
+    for operation in operations:
+        job,machine,time = operation
+
+        max_time = max(machine_time[machine],job_time[job-1])
+
+        machine_time[machine] = max_time + time
+        job_time[job-1] = machine_time[machine]
+    
+    # job that has the max time to complete
+    makespan = max(job_time)
+    return makespan
 
 def main():
-    file = "datasets//ft06.txt"
+    file = "datasets//teste.txt"
     n_jobs, n_machines, operations = read_file(file)
 
     operations_dict = create_dictionary(operations)
@@ -128,6 +141,9 @@ def main():
     g = ig.Graph.Full(n=size_graph, directed=True)
     
     delete_edges(g,n_jobs,n_machines)
-    create_path(g,n_jobs,n_machines,sequence,operations_dict)
+    path = create_path(g,n_jobs,n_machines,sequence,operations_dict)
+
+    makespan = evaluate_makespan(path,operations_dict,n_jobs,n_machines)
+    print(makespan)
 
 main()
