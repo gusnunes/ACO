@@ -26,7 +26,30 @@ def create_edges(g,n_jobs,n_machines):
         inicio = fim
         fim += n_machines
 
-        print(edges) 
+        print(edges)
+
+# edges that constraint operation is not mainted
+def delete_edges(g,n_jobs,n_machines):
+    inicio = 0
+    fim = n_machines
+
+    for _ in range(n_jobs):
+        operation = inicio
+
+        for _ in range(n_machines-1):
+            for idx,i in enumerate(range(operation,fim-1)):
+                
+                e_id = g.get_eid(i+1,operation)
+                g.delete_edges(e_id)
+                
+                if idx != 0:
+                    e_id = g.get_eid(operation,i+1)
+                    g.delete_edges(e_id)
+                    
+            operation += 1
+    
+        inicio = fim
+        fim += n_machines
 
 def create_label(g):
     n_vertices = g.vcount()
@@ -37,17 +60,21 @@ def main():
     file = "datasets//teste.txt"
     n_jobs, n_machines, operations = read_file(file)
 
-    g = ig.Graph()
-    # g.add_vertices(n_jobs*n_machines)
-
-    # create_edges(g,n_jobs,n_machines)
-    # create_label(g)
-
-    g = ig.Graph.Full(n=n_jobs*n_machines)
+    g = ig.Graph.Full(n=n_jobs*n_machines, directed=True)
     create_label(g)
 
-    layout = g.layout("kk")
-    ig.plot(g, layout=layout, bbox=(800, 800))
+    delete_edges(g,n_jobs,n_machines)
 
+    for vertice in g.vs:
+        print(vertice)
+        
+        vizinhos = g.successors(vertice)
+        for i in vizinhos:
+            print(i)
+        
+        print("")
+
+    """layout = g.layout("kk")
+    ig.plot(g, layout=layout, bbox=(800, 800))"""
 
 main()
