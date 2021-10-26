@@ -1,5 +1,7 @@
 import igraph as ig
 
+import random
+
 def read_file(file_name):
     f = open(file_name, "r")
     n_jobs, n_machines = [int(valor) for valor in f.readline().split()]
@@ -15,66 +17,117 @@ def read_file(file_name):
     f.close()
     return n_jobs, n_machines, operations
 
-def create_edges(g,n_jobs,n_machines):
-    inicio = 0
-    fim = n_machines
+def create_dictionary(operations):
+    dictionary = {}
+    for idx,operation in enumerate(operations):
+        dictionary[idx] = operation
+    
+    return dictionary
+
+# operations sequence of each job
+def create_sequence(n_jobs,n_machines,operations):
+    sequences = []
+    start = 0
+    stop = n_machines
     
     for _ in range(n_jobs):
-        edges = [(x,x+1) for x in range(inicio,fim-1)]
-        g.add_edges(edges)
-
-        inicio = fim
-        fim += n_machines
-
-        print(edges)
+        sequences.append(operations[start:stop])
+        
+        start = stop
+        stop += n_machines
+    
+    return sequences
 
 # edges that constraint operation is not mainted
 def delete_edges(g,n_jobs,n_machines):
-    inicio = 0
-    fim = n_machines
+    # edges between operations of job
+    start = 0
+    end = n_machines
 
     for _ in range(n_jobs):
-        operation = inicio
+        j = start
 
         for _ in range(n_machines-1):
-            for idx,i in enumerate(range(operation,fim-1)):
-                
-                e_id = g.get_eid(i+1,operation)
+            for idx,i in enumerate(range(j,end-1)):
+                # delete infeasible edges
+                e_id = g.get_eid(i+1,j)
                 g.delete_edges(e_id)
                 
                 if idx != 0:
-                    e_id = g.get_eid(operation,i+1)
-                    g.delete_edges(e_id)
-                    
-            operation += 1
+                    e_id = g.get_eid(j,i+1)
+                    g.delete_edges(e_id)      
+            
+            j += 1
     
-        inicio = fim
-        fim += n_machines
+        start = end
+        end += n_machines
 
-def create_label(g):
-    n_vertices = g.vcount()
-    label = [i for i in range(1,n_vertices+1)]
-    g.vs["label"] = label
+def create_path(g,n_jobs,n_machines,sequence,operations_dict):
+    # lembrar que cada formiga vai ter uma COPIA de sequence
+    
+    # lista do caminho que a formiga vai seguir
+    tabu = []
+    tabu_full = n_jobs*n_machines
+    
+    first_operations = [n_machines*i for i in range(n_jobs)]
+    op = random.choice(first_operations)
+
+    tabu.append(op)
+
+    idx_job = op // n_machines
+    sequence[idx_job].pop(0)
+
+    while len(tabu) < tabu_full:
+        vertex = g.vs[op]
+        neighbors = g.successors(vertex)
+
+        # print("vertex:", vertex)
+
+        # feasible operations -> path
+        feasible = []
+        
+        for neighbor in neighbors:
+            vertex_index = g.vs[neighbor].index
+            if  vertex_index not in tabu:
+                # print("vertex_index:", vertex_index)
+                idx_job = vertex_index // n_machines
+                # print("idx_job:", idx_job)
+                
+                operation = operations_dict[vertex_index]
+                # print("operation:",operation)
+                feasible_operation = sequence[idx_job][0]
+                # print("feasible_operation", feasible_operation)
+
+                if operation == feasible_operation:
+                    index = g.vs[neighbor].index
+                    feasible.append(index)
+                
+                # x = input()
+
+        # print(feasible)
+        op = random.choice(feasible)
+        tabu.append(op)
+
+        """print("tabu",tabu)
+        print("")"""
+
+        # Tem que dar um pop em SEQUENCE na operacao que foi utilizada
+        idx_job = op // n_machines
+        sequence[idx_job].pop(0)
+    
+    print(tabu)
 
 def main():
-    file = "datasets//teste.txt"
+    file = "datasets//ft06.txt"
     n_jobs, n_machines, operations = read_file(file)
 
-    g = ig.Graph.Full(n=n_jobs*n_machines, directed=True)
-    create_label(g)
+    operations_dict = create_dictionary(operations)
+    sequence = create_sequence(n_jobs,n_machines,operations)
 
+    size_graph = n_jobs*n_machines
+    g = ig.Graph.Full(n=size_graph, directed=True)
+    
     delete_edges(g,n_jobs,n_machines)
-
-    for vertice in g.vs:
-        print(vertice)
-        
-        vizinhos = g.successors(vertice)
-        for i in vizinhos:
-            print(i)
-        
-        print("")
-
-    """layout = g.layout("kk")
-    ig.plot(g, layout=layout, bbox=(800, 800))"""
+    create_path(g,n_jobs,n_machines,sequence,operations_dict)
 
 main()
