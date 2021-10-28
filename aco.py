@@ -3,7 +3,7 @@ import random
 import copy
 
 alfa = 0.8
-beta = 0.10
+beta = 0.17
 p = 0.1
 Q = 1
 
@@ -136,22 +136,12 @@ def roulette_wheel(g,origin_vertex,feasible_vertices,operations_dict):
     selection = random.choices(feasible_vertices, weights=probabilities, k=1)
     return selection[0]
 
-def create_path(g,n_jobs,n_machines,sequence,operations_dict):
-    # visited vertices -> ant path
-    tabu = []
-    tabu_full = n_jobs*n_machines
-    
-    # put the ant into a random first feasible vertex
-    first_operations = [n_machines*i for i in range(n_jobs)]
-    op = random.choice(first_operations)
-    tabu.append(op)
-
+def create_path(g,n_machines,sequence,operations_dict,tabu,tabu_size):
     #print("\nprimeira operacao:",op)
 
-    idx_job = op // n_machines
-    sequence[idx_job].pop(0)
-
-    while len(tabu) < tabu_full:
+    op = tabu[-1]
+    
+    while len(tabu) < tabu_size:
         vertex = g.vs[op]
         neighbors = g.successors(vertex)
 
@@ -169,7 +159,6 @@ def create_path(g,n_jobs,n_machines,sequence,operations_dict):
                 if operation == feasible_operation:
                     feasible.append(neighbor_index)
                 
-        #print("feasibles:", feasible)
         # decides which vertex the ant gonna choose
         vertex_selected = roulette_wheel(g,vertex,feasible,operations_dict)
         op = vertex_selected
@@ -181,31 +170,107 @@ def create_path(g,n_jobs,n_machines,sequence,operations_dict):
 
         #x = input()
 
-        # Tem que dar um pop em SEQUENCE na operacao que foi utilizada
+        # pop in the used sequence operation
         idx_job = op // n_machines
         sequence[idx_job].pop(0)
     
     return tabu
 
-def execute(g,n_jobs,n_machines,sequence,operations_dict):
-    cycle = 300
-    n_ants = 10
+def delete_operations(idx_operations,sequence,n_machines):
+    for operation in idx_operations:
+        idx_job = operation // n_machines
+        sequence[idx_job].pop(0)
     
-    for i in range(cycle):
+    return sequence
+
+def best_ants(ants_path,n_jobs,n_machines,operations_dict,n_operations):
+    idx_value = []
+    
+    for idx,ant_path in enumerate(ants_path):
+        makespan = evaluate_makespan(ant_path,operations_dict,n_jobs,n_machines)
+        idx_value.append((idx,makespan))
+      
+    # take the n smallest makespan
+    sorted_values = sorted(idx_value, key=lambda x: x[1])
+    ants_idx = sorted_values[:n_operations]
+
+    return [idx for idx,_ in ants_idx]
+
+def stage_2(g,n_jobs,n_machines,nc2,m2,cc2,sequence,operations_dict,stage1_ants):
+    # best n paths
+    n_operations = 5
+    best_paths = best_ants(stage1_ants,n_jobs,n_machines,operations_dict,n_operations)
+    
+    for _ in range(nc2):
+        ants = []
+
+        for _ in range(m2):
+            tabu_size = cc2
+            sequence_copy = copy.deepcopy(sequence)
+
+            idx_path = random.choice(best_paths)
+            tabu = stage1_ants[idx_path]
+
+            sequence_copy = delete_operations(tabu,sequence_copy,n_machines)
+
+            ant = create_path(g,n_machines,sequence_copy,operations_dict,tabu,tabu_size)
+            ants.append(ant)
+        
+        update_evaporating(g)
+        update_pheromone(g,ants,operations_dict,n_jobs,n_machines)
+    
+    return ants
+
+def stage_1(g,n_jobs,n_machines,nc1,m1,cc1,sequence,operations_dict):
+    for _ in range(nc1):
         # each ant has a path
         ants = []
         
-        for _ in range(n_ants):
+        for _ in range(m1):
+            # visited vertices -> ant path
+            tabu = []
+            tabu_size = cc1
+            
             sequence_copy = copy.deepcopy(sequence)
-            ant = create_path(g,n_jobs,n_machines,sequence_copy,operations_dict)
+
+            # put the ant into a random first feasible vertex
+            first_operations = [n_machines*i for i in range(n_jobs)]
+            operation = random.choice(first_operations)
+            tabu.append(operation)
+
+            # pop in the first used sequence operation
+            idx_job = operation // n_machines
+            sequence_copy[idx_job].pop(0)
+            
+            ant = create_path(g,n_machines,sequence_copy,operations_dict,tabu,tabu_size)
             ants.append(ant)
         
-        # print("\nCycle:", i)
-        # update_evaporating(g)
+        update_evaporating(g)
         update_pheromone(g,ants,operations_dict,n_jobs,n_machines)
-        #print(g.es["weight"])
     
     return ants
+
+def execute(g,n_jobs,n_machines,sequence,operations_dict):
+    # parameters
+    nc = 3000 # cycles number
+    cc = n_jobs * n_machines # operations number
+    m  = cc # ants number
+    r  = 0.3 # ratio
+
+    # Stage 1
+    m1  = round(r * m)
+    nc1 = round(r * nc)
+    cc1 = round(r * cc)
+    
+    stage1_ants = stage_1(g,n_jobs,n_machines,nc1,m1,cc1,sequence,operations_dict)
+
+    # Stage 2
+    m2 = m - m1
+    nc2 = nc - nc1
+    cc2 = cc
+
+    stage2_ants = stage_2(g,n_jobs,n_machines,nc2,m2,cc2,sequence,operations_dict,stage1_ants)
+    return stage2_ants
 
 def main():
     file = "datasets//ft06.txt"
@@ -219,7 +284,7 @@ def main():
     
     delete_edges(g,n_jobs,n_machines)
 
-    # pesquisar aqui qual o melhor valor de feromonio inicial para as arestas
+    # initial pheromone
     g.es["weight"] = 1
 
     results = []
