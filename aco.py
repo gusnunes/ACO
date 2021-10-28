@@ -3,8 +3,9 @@ import random
 import copy
 
 alfa = 0.8
-beta = 0.17
+beta = 0.10
 p = 0.1
+Q = 1
 
 def read_file(file_name):
     f = open(file_name, "r")
@@ -67,11 +68,11 @@ def delete_edges(g,n_jobs,n_machines):
         end += n_machines
 
 def evaluate_makespan(path,operations_dict,n_jobs,n_machines):
-    print(path)
+    # print(path)
     # transform path to operations
     operations = [operations_dict[i] for i in path]
 
-    print(operations)
+    # print(operations)
     
     # each machine has a end time
     machine_time = [0 for _ in range(n_machines)]
@@ -91,11 +92,25 @@ def evaluate_makespan(path,operations_dict,n_jobs,n_machines):
     makespan = max(job_time)
     return makespan
 
-def update_evaporating():
-    pass
+def update_pheromone(g,ant_paths,operations_dict,n_jobs,n_machines):
+    # all paths has the same size
+    size_path = len(ant_paths[0])
+    
+    for ant_path in ant_paths:
+        makespan = evaluate_makespan(ant_path,operations_dict,n_jobs,n_machines)
+        """print(ant_path)
+        print(makespan)"""
 
-def update_pheromone():
-    pass
+        for i in range(size_path-1):
+            origin = ant_path[i]
+            destiny = ant_path[i+1]
+
+            e_id = g.get_eid(origin,destiny)
+            g.es[e_id]["weight"] += (Q/makespan)
+        
+def update_evaporating(g):
+    new_weights = [(1-p)*weight for weight in g.es["weight"]]
+    g.es["weight"] = new_weights
 
 def roulette_wheel(g,origin_vertex,feasible_vertices,operations_dict):
     # pheromone trail and heuristic information importance
@@ -112,14 +127,12 @@ def roulette_wheel(g,origin_vertex,feasible_vertices,operations_dict):
 
     probabilities = []
     importances_sum = sum(importances)
-
-    print("importances:",importances)
     
     for importance in importances:
         probability = importance / importances_sum
-        probabilities.append(probability)
+        probabilities.append(round(probability,2))
 
-    print("probabilities:",probabilities)
+    #print("probabilities:",probabilities)
     selection = random.choices(feasible_vertices, weights=probabilities, k=1)
     return selection[0]
 
@@ -133,7 +146,7 @@ def create_path(g,n_jobs,n_machines,sequence,operations_dict):
     op = random.choice(first_operations)
     tabu.append(op)
 
-    print("primeira operacao:",op)
+    #print("\nprimeira operacao:",op)
 
     idx_job = op // n_machines
     sequence[idx_job].pop(0)
@@ -146,28 +159,27 @@ def create_path(g,n_jobs,n_machines,sequence,operations_dict):
         feasible = []
         
         for neighbor in neighbors:
-            vertex_index = g.vs[neighbor].index
-            if  vertex_index not in tabu:
+            neighbor_index = g.vs[neighbor].index
+            if  neighbor_index not in tabu:
                 # add some usefull comment here
-                idx_job = vertex_index // n_machines
-                operation = operations_dict[vertex_index]
+                idx_job = neighbor_index // n_machines
+                operation = operations_dict[neighbor_index]
                 feasible_operation = sequence[idx_job][0]
 
                 if operation == feasible_operation:
-                    index = g.vs[neighbor].index
-                    feasible.append(index)
+                    feasible.append(neighbor_index)
                 
-        print("feasibles:", feasible)
+        #print("feasibles:", feasible)
         # decides which vertex the ant gonna choose
         vertex_selected = roulette_wheel(g,vertex,feasible,operations_dict)
         op = vertex_selected
-        print("operacao selecionada:",op)
+        #print("operacao selecionada:",op)
         # op = random.choice(feasible)
         tabu.append(op)
 
-        print("tabu:", tabu)
+        #print("tabu:", tabu)
 
-        x = input()
+        #x = input()
 
         # Tem que dar um pop em SEQUENCE na operacao que foi utilizada
         idx_job = op // n_machines
@@ -176,27 +188,27 @@ def create_path(g,n_jobs,n_machines,sequence,operations_dict):
     return tabu
 
 def execute(g,n_jobs,n_machines,sequence,operations_dict):
-    # definir os valores iniciais do algoritmo
-    # do feromonio, evaporacao
-    alfa = 0.8
-    beta = 0.17
-    p = 0.1
-
-    cycle = 10
-    n_ants = 2
+    cycle = 300
+    n_ants = 10
     
-    # each ant has a path
-    ants = []
+    for i in range(cycle):
+        # each ant has a path
+        ants = []
+        
+        for _ in range(n_ants):
+            sequence_copy = copy.deepcopy(sequence)
+            ant = create_path(g,n_jobs,n_machines,sequence_copy,operations_dict)
+            ants.append(ant)
+        
+        # print("\nCycle:", i)
+        # update_evaporating(g)
+        update_pheromone(g,ants,operations_dict,n_jobs,n_machines)
+        #print(g.es["weight"])
     
-    for _ in range(n_ants):
-        sequence_copy = copy.deepcopy(sequence)
-        ant = create_path(g,n_jobs,n_machines,sequence_copy,operations_dict)
-        ants.append(ant)
-    
-    print(ants)
+    return ants
 
 def main():
-    file = "datasets//teste.txt"
+    file = "datasets//ft06.txt"
     n_jobs, n_machines, operations = read_file(file)
 
     operations_dict = create_dictionary(operations)
@@ -208,11 +220,15 @@ def main():
     delete_edges(g,n_jobs,n_machines)
 
     # pesquisar aqui qual o melhor valor de feromonio inicial para as arestas
-    g.es["weight"] = [0.1]
-    
-    execute(g,n_jobs,n_machines,sequence,operations_dict)
+    g.es["weight"] = 1
 
-    # makespan = evaluate_makespan(path,operations_dict,n_jobs,n_machines)
-    # print(makespan)
+    results = []
+    ant_paths = execute(g,n_jobs,n_machines,sequence,operations_dict)
+
+    for ant_path in ant_paths:
+        makespan = evaluate_makespan(ant_path,operations_dict,n_jobs,n_machines)
+        results.append(makespan)
+    
+    print(min(results))
 
 main()
